@@ -1,9 +1,9 @@
-Function Get-FTIMBXInfo {
-    ($Connect = Connect-ExchangeOnline -CertificateThumbPrint "cea73f8d2e1c5a599d6dd02ba0bd09ee5a145f7e" -AppID "6feffa76-ed46-4ecf-b853-3e9ad144baab" -Organization "ftigroup.onmicrosoft.com")
+Function Get-MBXInfo {
+    ($Connect = #cloud server)
 
     #Both Plan variables specify the plans we have for the mailboxes, userinfo is where we store all the data we need for the users, Notification stores the data for the email from Line#54 if statement
-    $Plan1 = 'ExchangeOnline-894f8e63-9109-4a52-af61-6950ead43e8d'
-    $Plan2 = 'ExchangeOnlineEnterprise-fa8478ae-1854-4d82-ab57-178661a84384'
+    $Plan1 = 'ExchangeOnline'
+    $Plan2 = 'ExchangeOnlineEnterprise'
     $userinfo = @()
     $Notification = ""
     $count = 0
@@ -159,4 +159,4 @@ Function Get-FTIMBXInfo {
     Disconnect-ExchangeOnline -Confirm:$false
 }
 
-Get-FTIMBXInfo
+Get-MBXInfo
