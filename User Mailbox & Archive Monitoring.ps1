@@ -1,42 +1,70 @@
-Function Get-MBXInfo {
-    Connect-ExchangeOnline 
-    
+Function Get-FTIMBXInfo {
+    ($Connect = Connect-ExchangeOnline -CertificateThumbPrint "cea73f8d2e1c5a599d6dd02ba0bd09ee5a145f7e" -AppID "6feffa76-ed46-4ecf-b853-3e9ad144baab" -Organization "ftigroup.onmicrosoft.com")
+
     #Both Plan variables specify the plans we have for the mailboxes, userinfo is where we store all the data we need for the users, Notification stores the data for the email from Line#54 if statement
-    $Plan1 = 'ExchangeOnline'
-    $Plan2 = 'ExchangeOnlineEnterprise'
+    $Plan1 = 'ExchangeOnline-894f8e63-9109-4a52-af61-6950ead43e8d'
+    $Plan2 = 'ExchangeOnlineEnterprise-fa8478ae-1854-4d82-ab57-178661a84384'
     $userinfo = @()
     $Notification = ""
-    
-    #The Below Variables are for the Send-MailMessage
-    $from = "from.mail.com"
-    $to = "to.mail.com"
-    $cc = "cc.mail.com"
-    $Smtp = "smtp.address.com"
+    $count = 0
 
-    ($userID = Get-Mailbox -ResultSize Unlimited -RecipientTypeDetails UserMailbox | Select-Object WindowsLiveID, ArchiveStatus, MailboxPlan)
+    #The Below Variables are for the Send-MailMessage
+    $SMM_Params = @{
+        From       = "ITSS-Exchange (FTI Germany) <dl_muc01_fti_itss-exchange@fti.de>"
+        To         = "dl_muc01_fti_itss-exchange@fti.de"
+        Cc         = "ITSS-Core (RedSea24) <DL_HRG01_RDS_ITSS-Core@fti.de>"
+        SmtpServer = "mail1-muc01.fti.int"
+        Encoding   = 'UTF8'
+        BodyAsHtml = $true
+    }
+
+    $userID = Get-Mailbox -ResultSize Unlimited -RecipientTypeDetails UserMailbox | Select-Object WindowsLiveID, ArchiveStatus, MailboxPlan, DisplayName
 
     foreach ($ID in $userID) {
-        $mbxinfo = Get-MailboxStatistics $ID.WindowsLiveID | Select-Object DisplayName, SystemMessageSizeWarningQuota, @{N = 'SizeGB'; e = { [Math]::Round(($_.TotalItemSize.ToString().Split("(")[1].Split(" ")[0].Replace(",", "") / 1GB), 2) } };
-        $Result = New-Object PSCustomObject
-        $Result | Add-Member -MemberType NoteProperty -Name "Name" -Value $mbxinfo.DisplayName
-        $Result | Add-Member -MemberType NoteProperty -Name "Email" -Value $ID.WindowsLiveID
-        $Result | Add-Member -MemberType NoteProperty -Name "ArchiveStatus" -Value $ID.ArchiveStatus
-        $Result | Add-Member -MemberType NoteProperty -Name "Size" -Value $mbxinfo.SizeGB
-        $Result | Add-Member -MemberType NoteProperty -Name "Plan" -Value $ID.MailboxPlan
-        $Result | Add-Member -MemberType NoteProperty -Name "ArchiveDate" -Value ""
-        $Result | Add-Member -MemberType NoteProperty -Name "Action" -Value ""
-        
-        #this will run to get the archive creation date, and will only run if the user has the archive Enabled
-        if ($ID.ArchiveStatus -eq 'Active') {
-            $Date = Get-MailboxFolderStatistics $ID.WindowsLiveID -Archive | Where-Object { $_.Name -eq 'Top of Information Store' } | Select-Object Date
-            ;
-            $Result.ArchiveDate = $Date.Date
+
+        $count++
+
+        try {
+            $mbxinfo = Get-MailboxStatistics $ID.WindowsLiveID | 
+            Select-Object @{N = 'SizeGB'; e = { [Math]::Round(($_.TotalItemSize.ToString().Split("(")[1].Split(" ")[0].Replace(",", "") / 1GB), 1) } };    
+        }
+        catch {
+            $Result.Action = 'User check failed'
+            Disconnect-ExchangeOnline -Confirm:$false
+            $Connect
+            Start-Sleep 30
+            continue
+        }
+
+        $Result = [PSCustomObject]@{
+            Name          = $ID.DisplayName
+            Email         = $ID.WindowsLiveID
+            ArchiveStatus = $ID.ArchiveStatus
+            Plan          = $ID.MailboxPlan
+            Size          = $mbxinfo.SizeGB
+            ArchiveDate   = ""
+            Action        = ""
+        }
+
+        try {
+            if ($ID.ArchiveStatus -eq 'Active') {
+                $Date = Get-MailboxFolderStatistics $ID.WindowsLiveID -Archive | Where-Object { $_.Name -eq 'Top of Information Store' } | Select-Object Date
+                ;
+                $Result.ArchiveDate = $Date.Date
+            }
+        }
+        catch {
+                $Result.Action = 'User check failed'
+                Disconnect-ExchangeOnline -Confirm:$false
+                $Connect
+                Start-Sleep 30
+                continue
         }
         
         if ($mbxinfo.SizeGB -lt 40) {
             continue
         }
-        elseif ($mbxinfo.SizeGB -ge 40 -and $mbxinfo.SizeGB -le 45 -and $ID.ArchiveStatus -eq 'None') {
+        elseif ([Int]$mbxinfo.SizeGB -in 40..45 -and $ID.ArchiveStatus -eq 'None') {
             $Result.Action = "Enable Archive"
             <#$ID | Select-Object WindowsLiveID | Out-File -FilePath .\Users-ForEnableArchive.txt -Force -Encoding UTF8
             ;
@@ -44,33 +72,36 @@ Function Get-MBXInfo {
             ;
             $Notification = "<b>Note</b>: The script for enableing archives has been initiated, you should receive its report shortly."#>
         }
-        elseif ($mbxinfo.SizeGB -ge 40 -and $mbxinfo.SizeGB -le 45 -and $ID.ArchiveStatus -eq 'Active') {
+        elseif ([Int]$mbxinfo.SizeGB -in 40..45 -and $ID.ArchiveStatus -eq 'Active') {
             continue
         }
-        elseif ($mbxinfo.SizeGB -gt 45 -and $mbxinfo.SizeGB -le 50 -and $ID.MailboxPlan -eq $Plan1) {
+        elseif ([Int]$mbxinfo.SizeGB -in 45..50 -and $ID.MailboxPlan -eq $Plan1) {
             $Result.Action = "Enable License Plan 2"
         }
-        elseif ($mbxinfo.SizeGB -gt 45 -and $mbxinfo.SizeGB -le 50 -and $ID.MailboxPlan -eq $Plan2) {
+        elseif ([Int]$mbxinfo.SizeGB -in 45..50 -and $ID.MailboxPlan -eq $Plan2) {
             continue
         }
-        elseif ($mbxinfo.SizeGB -gt 50 -and $mbxinfo.SizeGB -lt 90 -and $ID.MailboxPlan -eq $Plan1) {
+        elseif ([Int]$mbxinfo.SizeGB -in 50..90 -and $ID.MailboxPlan -eq $Plan1) {
             $Result.Action = "<b>CRITICAL!</b> Enable License Plan 2"
         }
-        elseif ($mbxinfo.SizeGB -gt 50 -and $mbxinfo.SizeGB -lt 90 -and $ID.MailboxPlan -eq $Plan2) {
+        elseif ([Int]$mbxinfo.SizeGB -in 50..90 -and $ID.MailboxPlan -eq $Plan2) {
             continue
         }
         elseif ($mbxinfo.SizeGB -ge 90) {
             $Result.Action = "check Retention policy"
         }
-        
-        #this will check if the user already has an archive older than 10 Days & the mailbox is still bigger than 40GBs & the user plan is still Plan1 (the lowest Plan)
-        if ($ID.ArchiveStatus -eq 'Active' -and $mbxinfo.SizeGB -ge 40 -and $ID.MailboxPlan -eq $Plan1 -and $Date.Date -lt (Get-date).AddDays(-10)) {
+
+        if ($ID.ArchiveStatus -eq 'Active' -and
+            $mbxinfo.SizeGB -ge 40 -and
+            $ID.MailboxPlan -eq $Plan1 -and
+            $Date.Date -lt (Get-date).AddDays(-10)) {
+
             #The variables below are for the Send-MailMessage command, in case they needed modifications later on
             $subject1 = "Archiving Policy needs a check"
             $bodyuser = $ID.WindowsLiveID
             $body1 = "Archiving policy for the below user has not been triggered on the last 10 days, please check <br> $bodyuser"
     
-            Send-MailMessage -From $from -To $to -Cc $cc -Subject $subject1 -SmtpServer $Smtp -Body $body1 -BodyAsHtml -Encoding UTF8
+            Send-MailMessage @SMM_Params -Subject $subject1 -Body $body1
         }
 
         $userinfo += $Result
@@ -94,7 +125,7 @@ Function Get-MBXInfo {
     }    
     
     if ($userinfo.count -eq 0) {
-        $table = "Hurray! No Action Required."
+        $table = "Hurray! No Action Required. <br> Total users checked ($count)"
     }
     else {
         $table = "<html>
@@ -105,6 +136,8 @@ Function Get-MBXInfo {
         TD{border: 1px solid black; padding: 5px; }
         </style>
         <h2>Users Mailboxes Report</h2>
+        <body> Total users checked ($count) <br> $Notification <br> $table </body>
+        <br>
         <table>
         <tr>
         <th>DisplayName</th>
@@ -119,11 +152,11 @@ Function Get-MBXInfo {
     }
     
     #The variables below are for the Send-MailMessage command, in case they needed modifications later on
-    $count = $userID.Count
     $subject = 'Users MailboxesSize Report'
-    $body = "Total users checked ($count) <br> $Notification <br> $table"
     
-    Send-MailMessage -From $from -To $to -Cc $cc -Subject $subject -SmtpServer $Smtp -Body $body -BodyAsHtml -Encoding UTF8
+    Send-MailMessage  @SMM_Params -Subject $subject -Body $table
+
+    Disconnect-ExchangeOnline -Confirm:$false
 }
 
-Get-MBXInfo
+Get-FTIMBXInfo
