@@ -10,10 +10,10 @@ Function Get-MBXInfo {
 
     #The Below Variables are for the Send-MailMessage
     $SMM_Params = @{
-        From       = "ITSS-Exchange (FTI Germany) <dl_muc01_fti_itss-exchange@fti.de>"
-        To         = "dl_muc01_fti_itss-exchange@fti.de"
-        Cc         = "ITSS-Core (RedSea24) <DL_HRG01_RDS_ITSS-Core@fti.de>"
-        SmtpServer = "mail1-muc01.fti.int"
+        From       = "from"
+        To         = "to"
+        Cc         = "cc"
+        SmtpServer = "smtpserver"
         Encoding   = 'UTF8'
         BodyAsHtml = $true
     }
