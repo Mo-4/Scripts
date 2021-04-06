@@ -1,9 +1,9 @@
 Function Get-MBXInfo {
     ($Connect = #cloud server)
 
-    #Both Plan variables specify the plans we have for the mailboxes, userinfo is where we store all the data we need for the users, Notification stores the data for the email from Line#54 if statement
-    $Plan1 = 'ExchangeOnline'
-    $Plan2 = 'ExchangeOnlineEnterprise'
+    #Both Plan variables specify the plans we have for the mailboxes, userinfo is where we store all the data we need for the users, Notification stores the data for the email from if statement
+    $Plan1 = 'Plan1'
+    $Plan2 = 'Plan2'
     $userinfo = @()
     $Notification = ""
     $count = 0
